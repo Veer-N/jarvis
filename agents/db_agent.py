@@ -43,6 +43,7 @@ def get_db_metrics(db_id):
     return {
         "CPU_Utilization": [random.uniform(10, 90) for _ in range(10)],
         "Storage_Usage_GB": [random.uniform(10, 50) for _ in range(10)],
+        "Active_Connections": [random.uniform(5, 20) for _ in range(10)],
         "Timestamps": [(now - datetime.timedelta(minutes=i)).strftime("%H:%M") for i in range(10)],
     }
 

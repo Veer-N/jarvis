@@ -14,7 +14,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from core.commander import parse_command
-from agents import aws_agent, db_agent, docker_agent, logs_agent, scheduler_agent as scheduler
+from agents import aws_agent, db_agent, docker_agent, logs_agent, jira_agent, scheduler_agent as scheduler
 
 # --------------------------------
 # Streamlit Config
@@ -423,7 +423,8 @@ elif menu == "Databases":
         metrics = db_agent.get_db_metrics(db['id'])
         st.line_chart({
             "CPU (%)": metrics["CPU_Utilization"],
-            "Storage (GB)": metrics["Storage_Usage_GB"]
+            "Storage (GB)": metrics["Storage_Usage_GB"],
+            "Active Connections": metrics["Active_Connections"]
         })
 
 
@@ -501,78 +502,177 @@ elif menu == "Docker Containers":
 
 
 # =================================================================
-# 5️⃣ LOGS DASHBOARD
+# 5️⃣ LOGS DASHBOARD (Manual + Auto-ticketing with Jira)
 # =================================================================
 elif menu == "Logs":
     st.subheader("📄 Logs Dashboard")
 
     # -----------------------
-    # Select files & level
+    # Logs Dashboard Controls (horizontal alignment)
     # -----------------------
-    log_files = ["All"] + logs_agent.available_logs
-    selected_file = st.selectbox("Select Log File", log_files)
-    level = st.selectbox("Level", ["ALL", "INFO", "WARNING", "ERROR"])
+    col_file, col_level, col_refresh = st.columns([2, 1, 1])
 
-    # Auto-refresh interval
-    refresh_interval = st.number_input("Refresh every (seconds)", min_value=1, max_value=60, value=5)
+    with col_file:
+        selected_file = st.selectbox("Select Log File", ["All"] + logs_agent.available_logs)
 
+    with col_level:
+        level = st.selectbox("Level", ["ALL", "INFO", "WARNING", "ERROR"])
+
+    with col_refresh:
+        refresh_interval = st.number_input("Refresh every (seconds)", min_value=3, max_value=60, value=10)
+
+    # -----------------------
+    # Enable Auto-Ticketing (separate row)
+    # -----------------------
+    auto_ticketing = st.toggle("Enable Auto-Ticketing", value=False)
+
+
+
+    # -----------------------
     # Determine files to read
+    # -----------------------
     files_to_read = logs_agent.available_logs if selected_file == "All" else [selected_file]
 
     # -----------------------
-    # Read logs in tail fashion
+    # Read logs (tail-style)
     # -----------------------
-    logs_to_show = {}
+    logs = {}
     for f in files_to_read:
-        new_logs = logs_agent.read_new_logs(f, level)
-        if not new_logs:
-            # If no new logs, show all existing lines
-            new_logs = logs_agent.read_all_logs(f, level)
-        logs_to_show[f] = new_logs
+        all_lines = logs_agent.read_all_logs(f)
+        new_lines = logs_agent.read_new_logs(f)
+
+        # Show tail: only new lines if available, otherwise all existing
+        if new_lines:
+            selected_lines = new_lines
+        else:
+            selected_lines = all_lines
+
+        # Apply level filter
+        if level and level.upper() != "ALL":
+            selected_lines = [l for l in selected_lines if level.upper() in l]
+
+        logs[f] = selected_lines
 
     # -----------------------
     # Display logs
     # -----------------------
-    for f, lines in logs_to_show.items():
-        st.markdown(f"**{f}**")
+    for f, lines in logs.items():
+        st.markdown(f"### 🧾 {f}")
         if not lines:
-            st.info(f"No {level} logs in {f}")
+            st.info(f"No {level} logs found in {f}")
         else:
             st.markdown(
-                "<div style='background:#f0f0f0; padding:8px; border-radius:6px; white-space:pre-wrap;'>"
+                "<div style='background:#f9f9f9; padding:8px; border-radius:6px; "
+                "white-space:pre-wrap; max-height:200px; overflow-y:auto;'>"
                 + "\n".join(lines) +
                 "</div>",
                 unsafe_allow_html=True
             )
+        st.markdown("<hr style='border:1px solid #ccc;'>", unsafe_allow_html=True)
 
     # -----------------------
-    # Create tickets for ERROR logs (only if level is ERROR or ALL)
+    # Manual Ticket Creation
     # -----------------------
-    if level in ["ERROR", "ALL"]:
-        if st.button("Create Tickets from ERROR logs"):
-            created = logs_agent.create_ticket_from_error(files=files_to_read)
-            st.success(f"Created {len(created)} ticket(s)")
+    if st.button("📝 Create Tickets from ERROR logs"):
+        created = []
+        for f in files_to_read:
+            for line in logs_agent.read_all_logs(f, level="ERROR"):
+                # Check if ticket already exists in Jira registry
+                existing_tickets = jira_agent.list_tickets(current_user="veer")
+                exists = any(t["source"] == f and t["summary"] == line for t in existing_tickets)
+                if not exists:
+                    t = jira_agent.create_ticket(summary=line, source=f, user="veer")
+                    created.append(t)
+        if created:
+            st.success(f"✅ {len(created)} new ticket(s) created.")
+        else:
+            st.info("ℹ️ Tickets already exist for current errors.")
+
+    # -----------------------
+    # Auto-ticketing (if ON)
+    # -----------------------
+    if auto_ticketing:
+        created = []
+        for f in files_to_read:
+            for line in logs_agent.read_all_logs(f, level="ERROR"):
+                existing_tickets = jira_agent.list_tickets(current_user="veer")
+                exists = any(t["source"] == f and t["summary"] == line for t in existing_tickets)
+                if not exists:
+                    t = jira_agent.create_ticket(summary=line, source=f, user="veer")
+                    created.append(t)
+        if created:
+            st.success(f"🪄 Auto-ticketing: {len(created)} new ticket(s) created.")
+        else:
+            st.caption("Auto-ticketing active — no new errors found.")
 
     # -----------------------
     # Auto-refresh
     # -----------------------
-    from streamlit_autorefresh import st_autorefresh
-    st_autorefresh(interval=refresh_interval*1000, key="logs_autorefresh")
+    st_autorefresh(interval=refresh_interval * 1000, key="logs_autorefresh_auto")
+
+
 
 
 # =================================================================
-# 6️⃣ TICKETS
+# 6️⃣ TICKETS DASHBOARD
 # =================================================================
 elif menu == "Tickets":
-    st.subheader("🎫 Active Tickets")
-    tickets = logs_agent.list_tickets()
+    st.subheader("🎫 Tickets Dashboard")
+
+    # -----------------------
+    # User options in one line
+    # -----------------------
+    col_team, col_closed = st.columns([1, 1])
+
+    with col_team:
+        show_team = st.toggle("Show Team Tickets", value=False)
+
+    with col_closed:
+        show_closed = st.toggle("Show Closed Tickets", value=False)
+
+
+    tickets = jira_agent.list_tickets(user_only=True, open_only=not show_closed)
+
+    # Optionally include team tickets
+    if show_team:
+        tickets += jira_agent.list_tickets(user_only=False, open_only=not show_closed)
+
     if not tickets:
-        st.info("No tickets available.")
+        st.info("No tickets to display.")
     else:
         for t in tickets:
-            with st.expander(f"🎟️ {t['id']} - {t['summary']}"):
-                st.write(f"File: {t['source']}")
-                st.write(f"Status: {t['status']}")
+            # Ticket card
+            with st.container():
+                st.markdown(
+                    f"""
+                    <div style="
+                        padding:12px;
+                        margin-bottom:10px;
+                        border-radius:10px;
+                        background-color:#f8f9fa;
+                        box-shadow:1px 1px 6px rgba(0,0,0,0.1);
+                    ">
+                    <h5 style="margin:0;">{t['summary']}</h5>
+                    <p style="margin:0; font-size:0.85em; color:gray;">
+                        Source: {t['source']} | Status: {t['status']} | Created: {t.get('timestamp','N/A')}
+                    </p>
+                    <a href="{t['jira_link']}" target="_blank">
+                        <button style="
+                            padding:5px 12px;
+                            margin-top:5px;
+                            background-color:#007bff;
+                            color:white;
+                            border:none;
+                            border-radius:6px;
+                            cursor:pointer;">
+                            Open in Jira
+                        </button>
+                    </a>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
 
 
 # =================================================================

@@ -1,4 +1,5 @@
 import os
+import json
 from pathlib import Path
 
 # -------------------------------
@@ -6,6 +7,8 @@ from pathlib import Path
 # -------------------------------
 LOG_DIR = Path("mock_logs")
 LOG_DIR.mkdir(exist_ok=True)
+
+REGISTRY_FILE = Path("tickets_registry.json")
 
 available_logs = ["app1.log", "app2.log", "db.log"]
 for file in available_logs:
@@ -19,7 +22,28 @@ for file in available_logs:
 
 # Track last read positions for incremental reads
 last_read_positions = {file: 0 for file in available_logs}
-mock_tickets = []
+
+# -------------------------------
+# Helper functions
+# -------------------------------
+
+def load_registry():
+    """Load previously created ticket registry from JSON file."""
+    if REGISTRY_FILE.exists():
+        with open(REGISTRY_FILE, "r") as f:
+            return json.load(f)
+    return []
+
+
+def save_registry(tickets):
+    """Save the current ticket registry to JSON."""
+    with open(REGISTRY_FILE, "w") as f:
+        json.dump(tickets, f, indent=2)
+
+
+# Load existing tickets on startup
+mock_tickets = load_registry()
+
 
 # -------------------------------
 # Utility Functions
@@ -94,8 +118,10 @@ def show_logs(level: str = None, files: list = None, all_logs=False):
 def create_ticket_from_error(files: list = None):
     """
     Scan ERROR logs in the given files and create tickets for new errors.
-    Ensures each log line creates only one ticket per file.
+    Ensures each log line creates only one ticket per file across restarts.
     """
+    global mock_tickets
+
     if files is None:
         files = available_logs
 
@@ -104,14 +130,15 @@ def create_ticket_from_error(files: list = None):
     for f in files:
         error_lines = read_all_logs(f, "ERROR")
         for line in error_lines:
-            # Skip if a ticket already exists for this file + message
+            # Unique key = filename + message
             exists = any(
-                t.get("source") == f and t.get("message") == line for t in mock_tickets
+                t.get("source") == f and t.get("message") == line
+                for t in mock_tickets
             )
             if exists:
                 continue
 
-            ticket_id = f"TICKET-{len(mock_tickets)+1}"
+            ticket_id = f"TICKET-{len(mock_tickets) + 1}"
             ticket = {
                 "id": ticket_id,
                 "source": f,
@@ -121,6 +148,10 @@ def create_ticket_from_error(files: list = None):
             }
             mock_tickets.append(ticket)
             created.append(ticket)
+
+    # Persist updated ticket registry
+    if created:
+        save_registry(mock_tickets)
 
     return created
 

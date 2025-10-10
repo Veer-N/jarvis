@@ -1,0 +1,29 @@
+[
+  {
+    "id": "TICKET-1",
+    "summary": "2025-09-28 09:00 ERROR App failed to start",
+    "source": "app1.log",
+    "status": "OPEN",
+    "user": "veer",
+    "jira_link": "https://jira.company.com/browse/TICKET-1",
+    "timestamp": "2025-10-10 20:49"
+  },
+  {
+    "id": "TICKET-2",
+    "summary": "2025-09-28 09:00 ERROR App failed to start",
+    "source": "app2.log",
+    "status": "OPEN",
+    "user": "veer",
+    "jira_link": "https://jira.company.com/browse/TICKET-2",
+    "timestamp": "2025-10-10 20:49"
+  },
+  {
+    "id": "TICKET-3",
+    "summary": "2025-09-28 09:00 ERROR App failed to start",
+    "source": "db.log",
+    "status": "OPEN",
+    "user": "veer",
+    "jira_link": "https://jira.company.com/browse/TICKET-3",
+    "timestamp": "2025-10-10 20:49"
+  }
+]
