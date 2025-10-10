@@ -1,0 +1,11 @@
+fastapi
+openai
+langchain
+uvicorn
+python-dotenv
+boto3
+slack_sdk
+jira
+streamlit
+gitpython
+prometheus-api-client

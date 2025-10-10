@@ -1,0 +1,14 @@
+[
+  {
+    "InstanceId": "i-1234567890abcdef0",
+    "State": "running",
+    "Type": "t2.micro",
+    "LaunchTime": "2025-09-27 22:02:46"
+  },
+  {
+    "InstanceId": "i-0abcdef1234567890",
+    "State": "stopped",
+    "Type": "t2.large",
+    "LaunchTime": "2025-09-27 22:02:46"
+  }
+]
