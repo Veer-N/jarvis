@@ -1,0 +1,16 @@
+{
+  "aws": {
+    "enabled": true,
+    "access_key": "",
+    "secret_key": ""
+  },
+  "jira": {
+    "enabled": true,
+    "username": "",
+    "api_token": ""
+  },
+  "docker": {
+    "enabled": true,
+    "host": ""
+  }
+}

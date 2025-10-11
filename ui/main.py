@@ -37,7 +37,8 @@ menu = st.sidebar.radio(
         "Docker Containers",
         "Logs",
         "Tickets",
-        "Scheduled Tasks"
+        "Scheduled Tasks",
+        "Settings"
     ],
     index=[
         "Command Console",
@@ -46,7 +47,8 @@ menu = st.sidebar.radio(
         "Docker Containers",
         "Logs",
         "Tickets",
-        "Scheduled Tasks"
+        "Scheduled Tasks",
+        "Settings"
     ].index(st.session_state.menu),
 )
 
@@ -712,3 +714,82 @@ elif menu == "Scheduled Tasks":
                         st.rerun()
 
 
+# =================================================================
+# ⚙️ SETTINGS DASHBOARD
+# =================================================================
+elif menu == "Settings":
+    import agents.settings_agent as settings_agent
+
+    st.subheader("⚙️ Integrations Settings")
+
+    st.markdown("Toggle integrations and set credentials to connect Jarvis to your tools.")
+
+    col1, col2, col3 = st.columns(3)
+
+    # ----------------------- AWS -----------------------
+    with col1:
+        if "aws_enabled" not in st.session_state:
+            st.session_state.aws_enabled = settings_agent.get_service_status("aws")
+
+        # Show toggle
+        aws_toggle = st.toggle("AWS", value=st.session_state.aws_enabled, key="aws_toggle")
+
+        # Update only if changed
+        if aws_toggle != st.session_state.aws_enabled:
+            st.session_state.aws_enabled = aws_toggle
+            settings_agent.set_service_status("aws", aws_toggle)
+
+        # Credential inputs if enabled
+        if st.session_state.aws_enabled:
+            access_key = st.text_input("Access Key", type="password", key="aws_access")
+            secret_key = st.text_input("Secret Key", type="password", key="aws_secret")
+            region = st.text_input("Region", key="aws_region", placeholder="e.g. ap-south-1")
+
+            if st.button("Save AWS Credentials"):
+                settings_agent.save_credentials("aws", {
+                    "access_key": access_key,
+                    "secret_key": secret_key,
+                    "region": region
+                })
+                st.success("AWS credentials saved securely.")
+
+    # ----------------------- JIRA -----------------------
+    with col2:
+        if "jira_enabled" not in st.session_state:
+            st.session_state.jira_enabled = settings_agent.get_service_status("jira")
+
+        jira_toggle = st.toggle("Jira", value=st.session_state.jira_enabled, key="jira_toggle")
+
+        if jira_toggle != st.session_state.jira_enabled:
+            st.session_state.jira_enabled = jira_toggle
+            settings_agent.set_service_status("jira", jira_toggle)
+
+        if st.session_state.jira_enabled:
+            jira_url = st.text_input("Jira URL", placeholder="https://your-domain.atlassian.net")
+            email = st.text_input("Email", key="jira_email")
+            api_token = st.text_input("API Token", type="password", key="jira_token")
+
+            if st.button("Save Jira Credentials"):
+                settings_agent.save_credentials("jira", {
+                    "jira_url": jira_url,
+                    "email": email,
+                    "api_token": api_token
+                })
+                st.success("Jira credentials saved securely.")
+
+    # ----------------------- DOCKER -----------------------
+    with col3:
+        if "docker_enabled" not in st.session_state:
+            st.session_state.docker_enabled = settings_agent.get_service_status("docker")
+
+        docker_toggle = st.toggle("Docker", value=st.session_state.docker_enabled, key="docker_toggle")
+
+        if docker_toggle != st.session_state.docker_enabled:
+            st.session_state.docker_enabled = docker_toggle
+            settings_agent.set_service_status("docker", docker_toggle)
+
+        if st.session_state.docker_enabled:
+            docker_host = st.text_input("Docker Host", placeholder="unix:///var/run/docker.sock")
+            if st.button("Save Docker Settings"):
+                settings_agent.save_credentials("docker", {"docker_host": docker_host})
+                st.success("Docker connection details saved.")
