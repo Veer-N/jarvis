@@ -457,11 +457,11 @@ elif menu == "Docker Containers":
                 if c["status"] == "running":
                     if st.button("Stop", key=f"stop_{c['id']}", use_container_width=True):
                         st.warning(docker_agent.stop_container(c["id"]))
-                        st.experimental_rerun()
+                        st.rerun()
                 else:
                     if st.button("Start", key=f"start_{c['id']}", use_container_width=True):
                         st.success(docker_agent.start_container(c["id"]))
-                        st.experimental_rerun()
+                        st.rerun()
 
             # -----------------------
             # Metrics section (compact)
